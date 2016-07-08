@@ -25,7 +25,7 @@ def sampleProposal(curz):
 
 def sample(size=10000):
     z=0     # initialze first state (random guess)
-    nreject=0.   # number of rejected candidates
+    nreject=0   # number of rejected candidates
     samples=np.zeros(size)
     samples[0]=z
     for i in range(size):

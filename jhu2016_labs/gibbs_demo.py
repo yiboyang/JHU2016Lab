@@ -51,7 +51,7 @@ def sampleProposal(BVG, lastState):
 # to m-dimensional data) jointly sampled in each iteration, the actual number
 # of iterations (calls to sampleProposal) is only n/m
 def sample(BVG, size=(1000,2)):
-    z=np.random.rand(2)     # initialze first states (random guess)
+    z=np.random.rand(size[1])     # initialze first state (random guess)
     niters=size[0]/size[1]  # actual number of Gibbs iterations
     samples=np.empty(size)
     for i in range(niters):
@@ -66,13 +66,18 @@ if __name__ == "__main__":
     # plot results
     fig=pl.figure()
     pl.title('Gibbs sampling for bivariate Gaussian')
-    pl.plot(sams[:,0], sams[:,1],'ro', label="Samples")
-    pl.plot(sams[:50,0], sams[:50,1], label="First 50 samples path")
-#
-#    gx=np.arange(-4,4,0.1)
-#    gy=targetPdf(gx)
-#    pl.hist(sam,normed=True,label="Sampled Distribution")
-#    pl.plot(gx,gy,'ro',label="True Distribution")
+    pl.scatter(sams[:,0], sams[:,1], alpha=0.2, label="Samples")
+    pl.plot(sams[:20,0], sams[:20,1], color='g', label="First 20 samples path")
+
+    # plot target
+    d=0.01
+    x = np.arange(np.min(sams), np.max(sams), d)
+    y = x.copy()
+    X, Y = np.meshgrid(x, y)
+    Z=bvg.pdf(np.dstack((X,Y)))
+    C = pl.contour(X, Y, Z, 10, label="True Distribution")
+    pl.clabel(C, inline=1, fontsize=10)
+
     pl.legend(loc='upper left')
     pl.savefig('Gibbs_demo.pdf')
 
