@@ -4,6 +4,8 @@
 import numpy as np
 from scipy.misc import logsumexp
 from scipy.special import gamma
+#from scipy.stats import multivariate_normal
+from scipy.stats._multivariate import multivariate_normal_frozen
 
 class Gaussian(object):
 
@@ -76,7 +78,6 @@ class GMM(object):
         llh_per_comp = self.logLikelihoodPerComponent(X)
         norms = logsumexp(llh_per_comp, axis=1)
         resps = np.exp(llh_per_comp.T - norms).T
-
         return resps
 
     def MStep(self, X, resps):
@@ -85,7 +86,12 @@ class GMM(object):
             self.gaussians[k].mean = mean
             self.gaussians[k].var = \
                     np.sum((resps[:, k] * ((X - mean) ** 2))) / resps[:, k].sum()
+
             self.weights[k] = np.sum(resps[:, k]) / X.shape[0]
+
+    def _EMStep(self, X):
+            Z = self.EStep(X)
+            self.MStep(X, Z)
 
     def EM(self, X, threshold=1e-2):
         previous_llh = float('-inf')
@@ -126,9 +132,9 @@ class BayesianGMM(object):
 
         self.count_mv = 1
         self.count_w = 1
-        self.means_avg = np.array(means)
-        self.variances_avg = np.array(variances)
-        self.weights_avg = np.array(weights)
+        self.sumMeans = np.array(means)
+        self.sumVariances = np.array(variances)
+        self.sumWeights = np.array(weights)
 
     def sampleLatentVariables(self, x):
         llh_per_comp = self.gmm.logLikelihoodPerComponent(x)
@@ -149,21 +155,21 @@ class BayesianGMM(object):
             mean, prec = NG.sample()
             self.gmm.gaussians[k].mean = mean
             self.gmm.gaussians[k].var = 1 / prec
-        self.means_avg += np.array([g.mean for g in self.gmm.gaussians])
-        self.variances_avg += np.array([g.var for g in self.gmm.gaussians])
+        self.sumMeans += np.array([g.mean for g in self.gmm.gaussians])
+        self.sumVariances += np.array([g.var for g in self.gmm.gaussians])
         self.count_mv += 1
 
     def sampleWeights(self, zs):
         dirichlet = self.dir0.posterior(zs)
         self.gmm.weights = dirichlet.sample()
-        self.weights_avg += self.gmm.weights
+        self.sumWeights += self.gmm.weights
         self.count_w += 1
 
     def averageGMM(self):
-        means = self.means_avg / self.count_mv
-        variances = self.variances_avg / self.count_mv
-        weights = self.weights_avg /  self.count_w
-        return GMM(means, variances, weights)
+        avg_means = self.sumMeans / self.count_mv
+        avg_variances = self.sumVariances / self.count_mv
+        avg_weights = self.sumWeights /  self.count_w
+        return GMM(avg_means, avg_variances, avg_weights)
 
 
 class NormalGamma(object):
@@ -225,4 +231,109 @@ class StudentT(object):
 
     def logLikelihood(self, x):
         return np.sum(np.log(self.pdf(x)))
+
+
+# multivariate extensions
+class MVGaussian(multivariate_normal_frozen):
+    def __init__(self, *args, **kwargs):
+        super(MVGaussian, self).__init__(*args,**kwargs)
+
+    def sample(self, *args, **kwargs):
+        return self.rvs(*args, **kwargs)
+
+    def logLikelihood(self, *args, **kwargs):
+        return self.logpdf(*args, **kwargs)
+
+    @staticmethod
+    def maximumLikelihood(X):
+        N = len(X)
+        mean = np.sum(X, axis = 0) / N
+        cov = np.sum((np.outer((X[i, :] - mu), X[i, :] - mu) for i in range(N)),
+                axis=  0) / N
+        return MVGaussian(mean, cov)
+
+class MVGMM(object):
+    def __init__(self, means, covs, weights):
+        '''Example: MVGMM(np.array([[0,0],[1,1]]),np.array([np.eye(2),
+        np.eye(2)]), [0.3, 0.7])'''
+        self.weights = weights
+        self.gaussians = [MVGaussian(means[k], covs[k]) for k in
+                          range(len(means))]
+        self.dim = self.gaussians[0].dim
+
+        assert np.isclose(np.sum(self.weights), 1.), 'The weights should sum up to one.'
+
+    @property
+    def k(self):
+        return len(self.gaussians)
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise KeyError('The index should be an integer.')
+        if key >= self.k or key < 0:
+            raise IndexError('Index out of bounds.')
+        return self.gaussians[key]
+
+    def sampleData(self, n=1000):
+        X = []  # all the data
+        for k in range(self.k):
+            gaussian = self.gaussians[k]
+            Xk = gaussian.sample(int(n * self.weights[k]))
+            X.append(Xk)
+        if self.dim == 1:   # for single dimensional case
+            X = np.hstack(X)[:, None]
+        X = np.vstack(X)
+
+        np.random.shuffle(X)
+        return X
+
+    def pdf(self, X, sum_pdf=True):
+        compVals = np.empty((len(X), self.k))
+        for k in range(self.k):
+            compVals[:, k] = self.weights[k] * self.gaussians[k].pdf(X)
+        if sum_pdf:
+            return compVals.sum(axis = 1)
+        return compVals
+
+    def logLikelihood(self, X):
+        return np.sum(np.log(self.pdf(X)))
+
+    def logLikelihoodPerComponent(self, X):
+        return np.log(self.pdf(X, sum_pdf = False))
+
+    def EStep(self, X):
+        llh_per_comp = self.logLikelihoodPerComponent(X)
+        norms = logsumexp(llh_per_comp, axis = 1)
+        resps = np.exp(llh_per_comp.T - norms).T
+        return resps
+
+    # this is a naiive implementation that can take a long time to converge;
+    # especially compared to the GMM class implemented earlier, the 1D MVGMM
+    # seems quite slow and often converges to a smaller maximum value
+    # (very likely due to large roundoff errors in the MStep summations)
+    def MStep(self, X, resps):
+        N = X.shape[0]
+        for k in range(self.k):
+            mean = X.T.dot(resps[:, k]) / resps[:, k].sum()
+            self.gaussians[k].mean = mean
+            self.gaussians[k].cov= \
+                    np.sum((resps[i, k] * \
+                    np.outer((X[i, :] - mean), X[i, :] - mean) \
+                        for i in range(N)), axis = 0) / resps[:, k].sum()
+
+            self.weights[k] = np.sum(resps[:, k]) / N
+
+    def _EMStep(self, X):
+            Z = self.EStep(X)
+            self.MStep(X, Z)
+
+    def EM(self, X, threshold=1e-2):
+        previous_llh = float('-inf')
+        current_llh = self.logLikelihood(X)
+        while current_llh - previous_llh > threshold:
+            print(current_llh)
+            self._EMStep(X)
+            previous_llh = current_llh
+            current_llh = self.logLikelihood(X)
+
 
