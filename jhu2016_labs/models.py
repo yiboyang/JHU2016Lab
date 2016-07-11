@@ -1,6 +1,3 @@
-
-"""Gaussian distribution."""
-
 import numpy as np
 from scipy.misc import logsumexp
 from scipy.special import gamma
@@ -307,7 +304,7 @@ class MVGMM(object):
         resps = np.exp(llh_per_comp.T - norms).T
         return resps
 
-    # this is a naiive implementation that can take a long time to converge;
+    # this is a naive implementation that can take a long time to converge;
     # especially compared to the GMM class implemented earlier, the 1D MVGMM
     # seems quite slow and often converges to a smaller maximum value
     # (very likely due to large roundoff errors in the MStep summations)
@@ -335,5 +332,4 @@ class MVGMM(object):
             self._EMStep(X)
             previous_llh = current_llh
             current_llh = self.logLikelihood(X)
-
 

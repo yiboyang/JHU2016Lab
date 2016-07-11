@@ -23,7 +23,7 @@ def sampleProposal(curz):
     return np.random.normal(curz,rho)
 
 
-def sample(size=10000):
+def sample(size=1000):
     z=0     # initialze first state (random guess)
     nreject=0   # number of rejected candidates
     samples=np.zeros(size)
@@ -53,10 +53,11 @@ if __name__ == "__main__":
     # plot results
     fig=pl.figure()
     pl.title('Metropolis sampling')
-    gx=np.arange(-4,4,0.1)
+    gx=np.linspace(-4,4,1000)
     gy=targetPdf(gx)
     pl.hist(sam,normed=True,label="Sampled Distribution")
-    pl.plot(gx,gy,'ro',label="True Distribution")
+    pl.plot(gx,gy,'r',lw=2,label="True Distribution")
     pl.legend(loc='upper left')
-    pl.savefig('Metropolis_demo.pdf')
+    pl.show()
+    #pl.savefig('Metropolis_demo.pdf')
 

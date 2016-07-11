@@ -1,23 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as pl
-from scipy.stats import multivariate_normal
+from models import MVGaussian
 # demonstrates Gibbs sampling algorithm for bivariate Gaussian
 
-# target distribution is of the form p(z1,z2,...zm); here we use a joint Gaussian
-# dist (m=2, bivariate)
-
-class MVGaussian(object):
-
-    def __init__(self, mean, cov):
-        self.mean = mean
-        self.cov = cov
-        self.mvg = multivariate_normal(mean, cov)
-
-    def pdf(self, x):
-        return self.mvg.pdf(x)
-
-    def sample(self, x):
-        return np.random.multivariate_normal(self.mean, self.cov)
 
 # proposal distribution here consists of the m conditional distributions
 # it can be shown that the conditional distributions of multivariate Gaussian
@@ -27,8 +12,7 @@ def sampleProposal(BVG, lastState):
     # we have 2 vars, so we sample z_(i+1) conditioned on current z_i
     mu=BVG.mean
     sig=BVG.cov
-    m=len(mu)   # m is the number of dimensions
-    assert m==2
+    assert BVG.dim==2
     # initialize current state with the end state from last iteration
     state=lastState.copy()
     # each iteration will produce m samples (each m-dimensional)
@@ -38,7 +22,7 @@ def sampleProposal(BVG, lastState):
     # [x(t+1), y(t+1)]
     # state=[x(t+1), y(t+1)] # as initialization for next iteration
     smps=np.empty_like(sig)
-    for i in range(m):  # loop over dimensions
+    for i in range(2):  # loop over dimensions
         o = 1 if i ==0 else 0   # get index of the other dimension
         condMu = mu[i]  + sig[o,i]*(state[o]-mu[o])
         condSig = np.sqrt(1-sig[o,i]**2)
@@ -52,7 +36,7 @@ def sampleProposal(BVG, lastState):
 # of iterations (calls to sampleProposal) is only n/m
 def sample(BVG, size=(1000,2)):
     z=np.random.rand(size[1])     # initialze first state (random guess)
-    niters=size[0]/size[1]  # actual number of Gibbs iterations
+    niters=int(size[0]/size[1])  # actual number of Gibbs iterations
     samples=np.empty(size)
     for i in range(niters):
         sam, z = sampleProposal(BVG, z)
@@ -70,8 +54,8 @@ if __name__ == "__main__":
     pl.plot(sams[:20,0], sams[:20,1], color='g', label="First 20 samples path")
 
     # plot target
-    d=0.01
-    x = np.arange(np.min(sams), np.max(sams), d)
+    dx=0.01
+    x = np.arange(np.min(sams), np.max(sams), dx)
     y = x.copy()
     X, Y = np.meshgrid(x, y)
     Z=bvg.pdf(np.dstack((X,Y)))
@@ -79,5 +63,6 @@ if __name__ == "__main__":
     pl.clabel(C, inline=1, fontsize=10)
 
     pl.legend(loc='upper left')
-    pl.savefig('Gibbs_demo.pdf')
+    pl.show()
+    #pl.savefig('Gibbs_demo.pdf')
 
