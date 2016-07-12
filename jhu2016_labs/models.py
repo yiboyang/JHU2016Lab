@@ -373,12 +373,6 @@ class MVStudentT():
         return res
 
 
-#TODO
-#    def logLikelihood(self, x):
-#        return np.sum(np.log(self.pdf(x)))
-
-
-
 
 class InvWishart(invwishart_frozen):
     def __init__(self, *args, **kwargs):
@@ -395,9 +389,9 @@ class InvWishart(invwishart_frozen):
 class NormalInvWishart(object):
 
     def __init__(self, m0, k0, v0, S0):
-        '''NIW distribution over the mean and covariance
-        matrix of a multivariate Gaussian distribution.
-            Parameters:
+        '''NIW distribution over the mean and covariance matrix of a
+        multivariate Gaussian distribution.
+        Parameters:
         `m0` is our prior mean (expected value) for the Gaussian
         `k0` is how strongly we believe in `m0`
         `S0` is proportional to our prior mean for the covariance matrix
@@ -408,12 +402,12 @@ class NormalInvWishart(object):
         D = len(m0)
         assert v0 >= D, "degrees of freedom can't be less than dimension of scale matrix"
         self.D = D
-        self.m0 = m0
-        self.k0 = k0
-        self.v0 = v0
-        self.S0 = S0
+        self.m = m0
+        self.k = k0
+        self.v = v0
+        self.S = S0
         self.iw = InvWishart(df=v0, scale=S0)
-        # can't use a MVGaussian here because its cov depends on self.iw
+        # can't use a MVGaussian yet because its cov depends on self.iw
         #self.mvg =
 
     def sample(self):
@@ -422,9 +416,9 @@ class NormalInvWishart(object):
 #        if size==1:
 #            cov = cov[None, ...]    # otherwise iw.sample(1) will return a
 #            # "flat" sample instead of array of samples and disaster will ensue
-#        mean = np.array([multivariate_normal.rvs(self.m0, (c)/self.k0) for c in cov])
+#        mean = np.array([multivariate_normal.rvs(self.m, (c)/self.k) for c in cov])
         cov = self.iw.sample()
-        mean = multivariate_normal.rvs(self.m0, (cov)/self.k0)
+        mean = multivariate_normal.rvs(self.m, (cov)/self.k)
         return mean, cov
 
     def logpdf(self, mu, sigma):
@@ -432,8 +426,8 @@ class NormalInvWishart(object):
         assert len(mu) == sigma.shape[0] == sigma.shape[1], \
             'mu and sigma should have the same dimension'
         logPSig = self.iw.logpdf(sigma)
-        logPMu = multivariate_normal.logpdf(mu, mean=self.m0,
-                cov=(sigma/self.k0))
+        logPMu = multivariate_normal.logpdf(mu, mean=self.m,
+                cov=(sigma/self.k))
 
         return logPSig + logPMu
 
@@ -443,23 +437,21 @@ class NormalInvWishart(object):
     def posterior(self, X):
         N = len(X)
         X_bar = X.mean(axis=0)
-        k = self.k0 + N
-        v = self.v0 + N
-        m = (self.k0*self.m0 + N*X_bar) / k
+        k = self.k + N
+        v = self.v + N
+        m = (self.k*self.m + N*X_bar) / k
         S_ = np.sum((np.outer(X[i, :], X[i, :]) for i in range(N)), axis=0)
-        S = self.S0 + S_ + self.k0*np.outer(self.m0, self.m0) - k*np.outer(m, m)
+        S = self.S + S_ + self.k*np.outer(self.m, self.m) - k*np.outer(m, m)
 
         return NormalInvWishart(m, k, v, S)
 
     def predictiveDensity(self):
-        # here the prior parameters m0, k0,... should have been updated
-        # according to the posterior
-        mu = self.m0
-        sigma = (self.k0 + 1) * self.S0 / (self.k0 * (self.v0 - self.D + 1))
-        nu = self.v0 - self.D + 1
+        mu = self.m
+        sigma = (self.k + 1) * self.S / (self.k * (self.v - self.D + 1))
+        nu = self.v - self.D + 1
         return MVStudentT(mu, sigma, nu)
 
-###
+
 class BayesianMVGMM(object):
 
     def __init__(self, alpha, m0, k0, v0, S0):
@@ -478,11 +470,11 @@ class BayesianMVGMM(object):
             covs.append(c)
         self.mvgmm = MVGMM(means, covs, weights)
 
-        self.count_mc = 1
-        self.count_w = 1
-        self.sumMeans = np.array(means)
-        self.sumCovs = np.array(covs)
-        self.sumWeights = np.array(weights)
+#        self.count_mc = 1
+#        self.count_w = 1
+#        self.sumMeans = np.array(means)
+#        self.sumCovs = np.array(covs)
+#        self.sumWeights = np.array(weights)
 
 
     def collapsedSampleLatentVars(self, X, Z, niters):
@@ -500,13 +492,7 @@ class BayesianMVGMM(object):
         #, i.e. lists of data points indices that belong to each mixture
 
         Counts=np.array([len(i) for i in I])    # counts of data points for each mixture
-        ActiveCompIds = np.arange(0, K)         # list of component ids;
-                                                # default: [0, 1, ..., K-1]
-                                                # in future implementation this
-                                                # may be modified during
-                                                # sampling to exclude empty
-                                                # components
-
+        compIds = np.arange(0, K)         # list of component ids
 
         for t in range(niters):
             for i in range(N):
@@ -517,11 +503,10 @@ class BayesianMVGMM(object):
                 # remove X_i's statistics from component Z[i]
                 I[z] = Ix[np.where(Ix != i)]
                 Counts[z] -= 1
-                #TODO: figure out how to handle empty component
-                if Counts[z] <= 0:
-                    print("Warning: " + str(z) + "th component became empty")
-                    Counts[z]=0
-                    continue
+#                if Counts[z] <= 0:
+#                    print("Warning: " + str(z) + "th component became empty")
+#                    Counts[z]=0
+#                    continue
 
 
                 # compute log likelihood of Z_i conditioned on Z\_i and alpha;
@@ -548,7 +533,7 @@ class BayesianMVGMM(object):
 
                 # draw/sample a new component id for X_i from the above
                 # probability distribution
-                knew = np.random.choice(ActiveCompIds, p=probZ)
+                knew = np.random.choice(compIds, p=probZ)
                 # add X_i's statistics to the component Z_i = knew
                 Z[i] = knew
                 I[knew] = np.hstack((I[knew],i))
