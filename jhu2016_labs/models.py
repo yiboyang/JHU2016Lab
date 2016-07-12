@@ -1,8 +1,11 @@
 import numpy as np
 from scipy.misc import logsumexp
 from scipy.special import gamma
-#from scipy.stats import multivariate_normal
+from scipy.special import gammaln
+from scipy.stats import multivariate_normal
+from scipy.stats import invwishart
 from scipy.stats._multivariate import multivariate_normal_frozen
+from scipy.stats._multivariate import invwishart_frozen
 
 class Gaussian(object):
 
@@ -101,24 +104,25 @@ class GMM(object):
 
 class Dirichlet(object):
 
-    def __init__(self, alphas):
-        self.alphas = alphas
+    def __init__(self, alpha):
+        self.alpha = alpha
+        self.alph0 = np.sum(alpha)
 
     def sample(self):
-        return np.random.dirichlet(self.alphas)
+        return np.random.dirichlet(self.alpha)
 
     def posterior(self, x):
         Nk = x.sum(axis=0)
-        return Dirichlet(self.alphas + Nk)
+        return Dirichlet(self.alpha + Nk)
 
 
 class BayesianGMM(object):
 
-    def __init__(self, alphas, m, kappa, a, b):
-        self.dir0 = Dirichlet(alphas)
+    def __init__(self, alpha, m, kappa, a, b):
+        self.Dir0 = Dirichlet(alpha)
         self.NG0 = NormalGamma(m, kappa, a, b)
 
-        weights = self.dir0.sample()
+        weights = self.Dir0.sample()
         means = []
         variances = []
         for k in range(len(weights)):
@@ -157,7 +161,7 @@ class BayesianGMM(object):
         self.count_mv += 1
 
     def sampleWeights(self, zs):
-        dirichlet = self.dir0.posterior(zs)
+        dirichlet = self.Dir0.posterior(zs)
         self.gmm.weights = dirichlet.sample()
         self.sumWeights += self.gmm.weights
         self.count_w += 1
@@ -332,4 +336,234 @@ class MVGMM(object):
             self._EMStep(X)
             previous_llh = current_llh
             current_llh = self.logLikelihood(X)
+
+
+class MVStudentT():
+
+    def __init__(self, mean, prec, df):
+        '''Mu (mean), Sigma ('variance'), Nu(degrees of freedom)'''
+        self.mu = mean
+        self.sigma = prec
+        self.nu = df    # degrees of freedom
+        self.D = len(mean)  # dimension
+
+    def pdf(self, x):
+        '''pdf of a SINGLE observation'''
+        #TODO: extend to multiple observations X
+#        Num = gamma((self.nu + self.D) / 2.)
+#        Denom = (gamma(self.nu/2.)) * (self.nu**(self.D/2.)) * \
+#        (np.pi**(self.D/2.)) * ((np.linalg.det(self.sigma))**0.5) * (1 + \
+#                (1./self.D)*np.dot(np.dot((x-self.mu),np.linalg.inv(self.sigma)),
+#                    (x-self.mu)))**((self.nu+self.D)/2.)
+#
+#        return 1. * Num / Denom
+        return np.exp(self.logpdf(x))
+
+    def logpdf(self, x):
+        '''log pdf of a SINGLE observation'''
+        res = gammaln((self.nu + self.D) / 2.)
+        res -= gammaln(self.nu/2)
+        res -= (self.D/2.) * np.log(self.nu)
+        res -= (self.D/2.) * np.log(np.pi)
+        res -= 0.5 * np.log(np.linalg.det(self.sigma))
+        res -= ((self.nu+self.D)/2.) * np.log((1 + \
+                (1./self.D)*np.dot(np.dot((x-self.mu), \
+                np.linalg.inv(self.sigma)), (x-self.mu))))
+
+        return res
+
+
+#TODO
+#    def logLikelihood(self, x):
+#        return np.sum(np.log(self.pdf(x)))
+
+
+
+
+class InvWishart(invwishart_frozen):
+    def __init__(self, *args, **kwargs):
+        super(InvWishart, self).__init__(*args, **kwargs)
+
+    def sample(self, *args, **kwargs):
+        return self.rvs(*args, **kwargs)
+
+    def logLikelihood(self, *args, **kwargs):
+        return self.logpdf(*args, **kwargs)
+
+
+
+class NormalInvWishart(object):
+
+    def __init__(self, m0, k0, v0, S0):
+        '''NIW distribution over the mean and covariance
+        matrix of a multivariate Gaussian distribution.
+            Parameters:
+        `m0` is our prior mean (expected value) for the Gaussian
+        `k0` is how strongly we believe in `m0`
+        `S0` is proportional to our prior mean for the covariance matrix
+        `v0` is how strongly we believe in `S0`
+        Example: NormalInvWishart(np.array([1,1]),2,3,np.eye(2))
+        '''
+
+        D = len(m0)
+        assert v0 >= D, "degrees of freedom can't be less than dimension of scale matrix"
+        self.D = D
+        self.m0 = m0
+        self.k0 = k0
+        self.v0 = v0
+        self.S0 = S0
+        self.iw = InvWishart(df=v0, scale=S0)
+        # can't use a MVGaussian here because its cov depends on self.iw
+        #self.mvg =
+
+    def sample(self):
+        #TODO: maybe extend to allow multiple samples
+#        cov = self.iw.sample(size)
+#        if size==1:
+#            cov = cov[None, ...]    # otherwise iw.sample(1) will return a
+#            # "flat" sample instead of array of samples and disaster will ensue
+#        mean = np.array([multivariate_normal.rvs(self.m0, (c)/self.k0) for c in cov])
+        cov = self.iw.sample()
+        mean = multivariate_normal.rvs(self.m0, (cov)/self.k0)
+        return mean, cov
+
+    def logpdf(self, mu, sigma):
+        '''Returns the log pdf of a SINGLE pair of mu and sigma'''
+        assert len(mu) == sigma.shape[0] == sigma.shape[1], \
+            'mu and sigma should have the same dimension'
+        logPSig = self.iw.logpdf(sigma)
+        logPMu = multivariate_normal.logpdf(mu, mean=self.m0,
+                cov=(sigma/self.k0))
+
+        return logPSig + logPMu
+
+    def pdf(self, mu, sigma):
+        return np.exp(self.logpdf(mu, sigma))
+
+    def posterior(self, X):
+        N = len(X)
+        X_bar = X.mean(axis=0)
+        k = self.k0 + N
+        v = self.v0 + N
+        m = (self.k0*self.m0 + N*X_bar) / k
+        S_ = np.sum((np.outer(X[i, :], X[i, :]) for i in range(N)), axis=0)
+        S = self.S0 + S_ + self.k0*np.outer(self.m0, self.m0) - k*np.outer(m, m)
+
+        return NormalInvWishart(m, k, v, S)
+
+    def predictiveDensity(self):
+        # here the prior parameters m0, k0,... should have been updated
+        # according to the posterior
+        mu = self.m0
+        sigma = (self.k0 + 1) * self.S0 / (self.k0 * (self.v0 - self.D + 1))
+        nu = self.v0 - self.D + 1
+        return MVStudentT(mu, sigma, nu)
+
+###
+class BayesianMVGMM(object):
+
+    def __init__(self, alpha, m0, k0, v0, S0):
+        alpha=np.array(alpha)
+        m0=np.array(m0)
+        self.Dir0 = Dirichlet(alpha)
+        self.K = len(alpha) # number of mixture components
+        self.NIW0 = NormalInvWishart(m0, k0, v0, S0)
+
+        weights = self.Dir0.sample()
+        means = []
+        covs = []
+        for k in range(self.K):
+            m, c = self.NIW0.sample()
+            means.append(m)
+            covs.append(c)
+        self.mvgmm = MVGMM(means, covs, weights)
+
+        self.count_mc = 1
+        self.count_w = 1
+        self.sumMeans = np.array(means)
+        self.sumCovs = np.array(covs)
+        self.sumWeights = np.array(weights)
+
+
+    def collapsedSampleLatentVars(self, X, Z, niters):
+        '''Sample component ids (conditioned on the rest of the data);
+        Parameters: X: NxD data matrix X, Z: initial component assignments,
+        niters: number of iterations'''
+        N = len(X)
+        # keep a record of historic component assignments
+        record=np.empty((niters+1, N))  # rows are Zs; 1 extra row for initial Z
+        record[0, :] = Z
+
+        K=self.K    # number of GMM components
+        # compute statistics for each cluster
+        I=np.array([np.where(Z==k) for k in range(K)])[:,0]    # inverse indices
+        #, i.e. lists of data points indices that belong to each mixture
+
+        Counts=np.array([len(i) for i in I])    # counts of data points for each mixture
+        ActiveCompIds = np.arange(0, K)         # list of component ids;
+                                                # default: [0, 1, ..., K-1]
+                                                # in future implementation this
+                                                # may be modified during
+                                                # sampling to exclude empty
+                                                # components
+
+
+        for t in range(niters):
+            for i in range(N):
+                x = X[i, :]   # ith data entry, X_i
+                z = Z[i]    # mixture/component id of x
+                Ix = I[z]   # data indices of the zth component
+
+                # remove X_i's statistics from component Z[i]
+                I[z] = Ix[np.where(Ix != i)]
+                Counts[z] -= 1
+                #TODO: figure out how to handle empty component
+                if Counts[z] <= 0:
+                    print("Warning: " + str(z) + "th component became empty")
+                    Counts[z]=0
+                    continue
+
+
+                # compute log likelihood of Z_i conditioned on Z\_i and alpha;
+                # this is only a likelihood because we're not dividing by the
+                # total counts; the following produces a K dimensional vector
+                # [24.26, P.843, Murphy text]
+                logLZ_i = np.ones(K)*np.log((self.Dir0.alpha) + Counts)
+
+                # compute conditional log probability of x (i.e. X_i),
+                # conditioned on Z_i being assigned to each of K components)
+                # [24.27, P.843, Murphy text]
+                logPx = np.empty(K)
+                for k in range(K):
+                    # this is the posterior predictive, with evidence being all
+                    # the data assigned to cluster k except for X_i
+                    logPx[k] = \
+                        self.NIW0.posterior(X[I[k],:]).predictiveDensity().logpdf(x)
+
+                # the multinomial probability of Z_i is proportional to the
+                # product of the two terms above (hence normalization)
+                # [24.23, P.842, Murphy text]
+                logPZ = logLZ_i + logPx
+                probZ = np.exp(logPZ - logsumexp(logPZ))
+
+                # draw/sample a new component id for X_i from the above
+                # probability distribution
+                knew = np.random.choice(ActiveCompIds, p=probZ)
+                # add X_i's statistics to the component Z_i = knew
+                Z[i] = knew
+                I[knew] = np.hstack((I[knew],i))
+                Counts[knew] +=1
+
+                # record the new assignment for X_i (0th row for initial Z)
+                record[t+1, i] = knew
+
+        return record
+
+
+#    def averageGMM(self):
+#        avg_means = self.sumMeans / self.count_mv
+#        avg_variances = self.sumVariances / self.count_mv
+#        avg_weights = self.sumWeights /  self.count_w
+#        return GMM(avg_means, avg_variances, avg_weights)
+
 
