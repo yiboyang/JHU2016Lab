@@ -4,17 +4,19 @@ import matplotlib.pyplot as pl
 from models import *
 
 if __name__=='__main__':
+    np.random.seed(0)
+
     # true/target distribution
-    trueDist=MVGMM(np.array([[0,0],[1,1]]),np.array([np.eye(2), np.eye(2)]),[0.7,0.3])
+    trueDist=MVGMM(np.array([[0,0],[2,2]]),np.array([np.eye(2), np.eye(2)]),[0.7,0.3])
     N=100  # number of data points
     X=trueDist.sampleData(N)
     K=2     # set the number of mixtures in advance (here we're cheating a bit)
     Z=np.random.randint(0,K,N)  # randomly initialize mixture ids
 
-    # init Bayesian GMM
-    alpha=[1, 1]
-    m0 = [0, 1]
-    k0 = 4
+    # initialize prior Bayesian GMM with hyperparameters
+    alpha=[0.6, 0.4]
+    m0 = [1, 1]
+    k0 = 2
     v0 = 3
     S0 = np.eye(2)
     BGMM = BayesianMVGMM(alpha, m0, k0, v0, S0)
@@ -29,7 +31,7 @@ if __name__=='__main__':
     step = 5
     numplots = int((T+1)/step)
 
-    colors = 'bgrcmykw' # currently can have 8 colors/clusters max
+    colors = 'brcgmykw' # currently can have 8 colors/clusters max
     assert numplots <= len(colors)
 
     for i in range(0, (T+1), step):
@@ -42,7 +44,7 @@ if __name__=='__main__':
             clr+=1
 
         pl.title("Component Assignments from Collapsed Gibbs Sampling, Iteration "+str(i))
-        pl.savefig('Collapsed_Gibbs_demo_iter'+str(i)+'.pdf')
+        pl.savefig('Collapsed_Gibbs_demo_iter'+str(i)+'.png')
 
 
 #    m = 2   # number of subplots per figure
