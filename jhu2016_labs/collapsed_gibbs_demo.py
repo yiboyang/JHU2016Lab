@@ -15,6 +15,7 @@ if __name__=='__main__':
 
     # initialize prior Bayesian GMM with hyperparameters
     alpha=[0.6, 0.4]
+    assert K==len(alpha)    # number of mixture components
     m0 = [1, 1]
     k0 = 2
     v0 = 3
@@ -32,7 +33,7 @@ if __name__=='__main__':
     numplots = int((T+1)/step)
 
     colors = 'brcgmykw' # currently can have 8 colors/clusters max
-    assert numplots <= len(colors)
+    assert K <= len(colors)
 
     for i in range(0, (T+1), step):
         clr = 0
@@ -70,7 +71,6 @@ if __name__=='__main__':
 #                        color=colors[clr++])
 #            axarr[i, j].set_title("Gibbs Sampling Iteration "+str(toPlot[i,j]))
 #
-
 
 
 
