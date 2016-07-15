@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as pl
-from models import MVGaussian
+from .models import MVGaussian
 # demonstrates Gibbs sampling algorithm for bivariate Gaussian
 
 

@@ -1,4 +1,7 @@
 '''Collapsed Gibbs Sampling for Finite GMM'''
+import numpy as np
+#import matplotlib
+#matplotlib.use('Agg')   # for use on remote machine
 import matplotlib.pyplot as pl
 from .models import *
 
