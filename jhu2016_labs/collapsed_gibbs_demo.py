@@ -1,7 +1,6 @@
 '''Collapsed Gibbs Sampling for Finite GMM'''
-import numpy as np
 import matplotlib.pyplot as pl
-from models import *
+from .models import *
 
 if __name__=='__main__':
     np.random.seed(0)

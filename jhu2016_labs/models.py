@@ -3,7 +3,6 @@ from scipy.misc import logsumexp
 from scipy.special import gamma
 from scipy.special import gammaln
 from scipy.stats import multivariate_normal
-from scipy.stats import invwishart
 from scipy.stats._multivariate import multivariate_normal_frozen
 from scipy.stats._multivariate import invwishart_frozen
 
@@ -106,7 +105,7 @@ class Dirichlet(object):
 
     def __init__(self, alpha):
         self.alpha = alpha
-        self.alph0 = np.sum(alpha)
+        self.alpha0 = np.sum(alpha)
 
     def sample(self):
         return np.random.dirichlet(self.alpha)
@@ -249,7 +248,7 @@ class MVGaussian(multivariate_normal_frozen):
     def maximumLikelihood(X):
         N = len(X)
         mean = np.sum(X, axis = 0) / N
-        cov = np.sum((np.outer((X[i, :] - mu), X[i, :] - mu) for i in range(N)),
+        cov = np.sum((np.outer((X[i, :] - mean), X[i, :] - mean) for i in range(N)),
                 axis=  0) / N
         return MVGaussian(mean, cov)
 
