@@ -5,6 +5,7 @@ from scipy.special import gammaln
 from scipy.stats import multivariate_normal
 from scipy.stats._multivariate import multivariate_normal_frozen
 from scipy.stats._multivariate import invwishart_frozen
+#import pdb
 
 class Gaussian(object):
 
@@ -480,12 +481,15 @@ class BayesianMVGMM(object):
         '''Sample component ids (conditioned on the rest of the data);
         Parameters: X: NxD data matrix X, Z: initial component assignments,
         niters: number of iterations'''
-        N = len(X)
-        # keep a record of historic component assignments
-        record=np.empty((niters+1, N))  # rows are Zs; 1 extra row for initial Z
-        record[0, :] = Z
-
+        N = len(X)  # number of data points
         K=self.K    # number of GMM components
+
+        # samples of component assignments
+        samples=np.empty((niters, N),dtype=int)  # rows are Zs
+
+        # keep a record of posterior predictive dists (MVStudentT) per component
+        predictives=np.empty((niters, K), dtype=object)   # each row has K post predictives
+
         # compute statistics for each cluster
         I=np.array([np.where(Z==k) for k in range(K)])[:,0]    # inverse indices
         #, i.e. lists of data points indices that belong to each mixture
@@ -497,6 +501,7 @@ class BayesianMVGMM(object):
             for i in range(N):
                 x = X[i, :]   # ith data entry, X_i
                 z = Z[i]    # mixture/component id of x
+                # pdb.set_trace()
                 Ix = I[z]   # data indices of the zth component
 
                 # remove X_i's statistics from component Z[i]
@@ -538,10 +543,17 @@ class BayesianMVGMM(object):
                 I[knew] = np.hstack((I[knew],i))
                 Counts[knew] +=1
 
-                # record the new assignment for X_i (0th row for initial Z)
-                record[t+1, i] = knew
+                # record the new assignment for X_i
+                samples[t, i] = knew
 
-        return record
+            # calculate the posterior predictive probility distributions for
+            # each component under this new assignment we just sampled
+            for k in range(K):
+                predictives[t, k] = self.NIW0.posterior(X[I[k],:]).predictiveDensity()
+
+
+
+        return samples, predictives
 
 
 #    def averageGMM(self):
