@@ -64,5 +64,5 @@ if __name__ == "__main__":
 
     pl.legend(loc='upper left')
     pl.show()
-    #pl.savefig('Gibbs_demo.png')
+    #pl.savefig('../plots/Gibbs_demo.png')
 

@@ -47,7 +47,8 @@ if __name__=='__main__':
             clr+=1
 
         pl.title("Component Assignments from Collapsed Gibbs Sampling, Iteration "+str(i))
-        pl.savefig('Collapsed_Gibbs_demo_iter'+str(i)+'.png')
+        pl.show()
+        # pl.savefig('../plots/Collapsed_Gibbs_demo_iter'+str(i)+'.png')
 
 
 #    m = 2   # number of subplots per figure
