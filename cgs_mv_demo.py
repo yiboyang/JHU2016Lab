@@ -3,7 +3,7 @@ import numpy as np
 #import matplotlib
 #matplotlib.use('Agg')   # for use on remote machine
 import matplotlib.pyplot as pl
-from .models import *
+from jhu2016_labs.cgs_mv_gmm import *
 
 if __name__=='__main__':
     np.random.seed(0)
@@ -22,7 +22,7 @@ if __name__=='__main__':
     k0 = 2
     v0 = 3
     S0 = np.eye(2)
-    BGMM = BayesianMVGMM(alpha, m0, k0, v0, S0)
+    BGMM = CGSBayesianMVGMM(alpha, m0, k0, v0, S0)
 
     T=20   # number of sampling iterations
     Zs = BGMM.collapsedSampleLatentVars(X, Z, T)

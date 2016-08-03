@@ -59,5 +59,5 @@ if __name__ == "__main__":
     pl.plot(gx,gy,'r',lw=2,label="True Distribution")
     pl.legend(loc='upper left')
     pl.show()
-    #pl.savefig('../plots/Metropolis_demo.png')
+    #pl.savefig('plots/Metropolis_demo.png')
 
