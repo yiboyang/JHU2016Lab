@@ -37,7 +37,11 @@ class GSBayesianGMM(object):
         for k in range(self.gmm.k):
             indices = np.where(zs[:, k] == 1)
             if len(indices[0]) > 0:
-                NG = self.NG0.posterior(x[indices])
+                xk = x[indices]
+                Nk = len(xk)
+                xk_bar = xk.mean()
+                Sk = np.sum((xk - xk_bar)**2) / Nk
+                NG = self.NG0.posterior(Nk, xk_bar, Sk)
             else:
                 NG = self.NG0
             mean, prec = NG.sample()
@@ -48,7 +52,7 @@ class GSBayesianGMM(object):
         self.count_mv += 1
 
     def sampleWeights(self, zs):
-        dirichlet = self.dir0.posterior(zs)
+        dirichlet = self.dir0.posterior(zs.sum(axis=0))
         self.gmm.weights = dirichlet.sample()
         self.sumWeights += self.gmm.weights
         self.count_w += 1
